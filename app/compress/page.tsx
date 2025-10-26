@@ -1,14 +1,27 @@
 'use client'
 
 import { useState, useRef } from 'react'
-import { FiUpload, FiX, FiMinimize2 } from 'react-icons/fi'
+import { FiUpload, FiX, FiMinimize2, FiDownload, FiInfo, FiSettings, FiZap, FiShield, FiMail } from 'react-icons/fi'
 import Navbar from '@/components/Navbar'
 import Footer from '@/components/Footer'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Separator } from '@/components/ui/separator'
+import { 
+  compressPDF, 
+  getRecommendedCompressionSettings, 
+  formatFileSize, 
+  getCompressionPercentage,
+  type CompressionOptions,
+  type CompressionResult 
+} from '@/utils/pdfCompressor'
 
 interface PDFFile {
   id: string
   name: string
   size: string
+  sizeBytes: number
   file: File
 }
 
@@ -17,41 +30,65 @@ export default function CompressPDFPage() {
   const [isProcessing, setIsProcessing] = useState(false)
   const [processStatus, setProcessStatus] = useState<string>('')
   const [isDragOver, setIsDragOver] = useState(false)
+  const [compressionResult, setCompressionResult] = useState<CompressionResult | null>(null)
+  const [selectedUseCase, setSelectedUseCase] = useState<'email' | 'web' | 'print' | 'archive'>('email')
+  const [customOptions, setCustomOptions] = useState<CompressionOptions | null>(null)
+  const [showAdvancedOptions, setShowAdvancedOptions] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
-
-  const formatFileSize = (bytes: number): string => {
-    if (bytes === 0) return '0 Bytes'
-    const k = 1024
-    const sizes = ['Bytes', 'KB', 'MB', 'GB']
-    const i = Math.floor(Math.log(bytes) / Math.log(k))
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
-  }
 
   const generateId = () => Math.random().toString(36).substr(2, 9)
 
-  const startOver = () => { setSelectedFile(null); setProcessStatus('') }
+  const startOver = () => {
+    setSelectedFile(null)
+    setProcessStatus('')
+    setCompressionResult(null)
+    setCustomOptions(null)
+  }
 
   const handleFileSelect = () => fileInputRef.current?.click()
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (file && file.type === 'application/pdf') {
-      setSelectedFile({ id: generateId(), name: file.name, size: formatFileSize(file.size), file: file })
+      setSelectedFile({
+        id: generateId(),
+        name: file.name,
+        size: formatFileSize(file.size),
+        sizeBytes: file.size,
+        file: file
+      })
+      setCompressionResult(null)
+      setProcessStatus('')
     } else {
       alert('Please select a valid PDF file')
     }
     if (event.target) event.target.value = ''
   }
 
-  const handleDragOver = (event: React.DragEvent) => { event.preventDefault(); setIsDragOver(true) }
-  const handleDragLeave = (event: React.DragEvent) => { event.preventDefault(); setIsDragOver(false) }
+  const handleDragOver = (event: React.DragEvent) => {
+    event.preventDefault()
+    setIsDragOver(true)
+  }
+
+  const handleDragLeave = (event: React.DragEvent) => {
+    event.preventDefault()
+    setIsDragOver(false)
+  }
 
   const handleDrop = (event: React.DragEvent) => {
     event.preventDefault()
     setIsDragOver(false)
     const file = event.dataTransfer.files[0]
     if (file && file.type === 'application/pdf') {
-      setSelectedFile({ id: generateId(), name: file.name, size: formatFileSize(file.size), file: file })
+      setSelectedFile({
+        id: generateId(),
+        name: file.name,
+        size: formatFileSize(file.size),
+        sizeBytes: file.size,
+        file: file
+      })
+      setCompressionResult(null)
+      setProcessStatus('')
     } else {
       alert('Please select a valid PDF file')
     }
@@ -59,76 +96,436 @@ export default function CompressPDFPage() {
 
   const handleCompress = async () => {
     if (!selectedFile) return
+
     setIsProcessing(true)
-    setProcessStatus('Compressing PDF...')
+    setProcessStatus('Initializing compression...')
+    setCompressionResult(null)
+
     try {
-      await new Promise(resolve => setTimeout(resolve, 2000))
-      setProcessStatus('✅ Compression initiated. Feature coming soon!')
+      // Get compression options
+      const options = customOptions || getRecommendedCompressionSettings(
+        selectedFile.sizeBytes,
+        selectedUseCase
+      )
+
+      // Compress the PDF
+      const result = await compressPDF(selectedFile.file, options, (status) => {
+        setProcessStatus(status)
+      })
+
+      setCompressionResult(result)
+
+      if (result.success && result.compressedPdfBytes) {
+        setProcessStatus('Compression completed successfully!')
+      } else {
+        setProcessStatus(result.error || 'Compression failed')
+      }
+
     } catch (error: any) {
-      setProcessStatus(`❌ Error: ${error.message || 'Unknown error occurred'}`)
+      setProcessStatus(`Error: ${error.message || 'Unknown error occurred'}`)
+      setCompressionResult({
+        success: false,
+        originalSize: selectedFile.sizeBytes,
+        compressedSize: 0,
+        compressionRatio: 0,
+        error: error.message
+      })
     } finally {
       setIsProcessing(false)
     }
   }
 
+  const handleDownload = () => {
+    if (!compressionResult?.compressedPdfBytes || !selectedFile) return
+
+    const blob = new Blob([compressionResult.compressedPdfBytes as BlobPart], { type: 'application/pdf' })
+    const url = URL.createObjectURL(blob)
+    
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `compressed_${selectedFile.name}`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    
+    URL.revokeObjectURL(url)
+  }
+
+  const useCaseOptions = [
+    { value: 'email', label: 'Email Attachment', icon: FiMail, description: 'Optimize for email size limits' },
+    { value: 'web', label: 'Web Display', icon: FiZap, description: 'Balance quality and loading speed' },
+    { value: 'print', label: 'Print Quality', icon: FiShield, description: 'Preserve quality for printing' },
+    { value: 'archive', label: 'Long-term Storage', icon: FiSettings, description: 'Balance quality and storage' }
+  ]
+
   return (
-    <div className="min-h-screen bg-gray-900">
+    <div className="min-h-screen bg-gray-900 text-white">
       <Navbar />
-      <section className="bg-gradient-to-br from-gray-800 via-gray-700 to-yellow-900 py-16">
-        <div className="max-w-6xl mx-auto px-3 sm:px-6 lg:px-8">
-          <div className="text-center">
-            <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">Compress PDF</h1>
-            <p className="text-lg md:text-xl text-gray-300 max-w-2xl mx-auto">Reduce PDF file size without significant quality loss.</p>
-          </div>
-        </div>
-      </section>
-      <section className="py-16 bg-gray-800">
-        <div className="max-w-4xl mx-auto px-3 sm:px-6 lg:px-8">
-          <div className="bg-white rounded-xl p-4 md:p-8 mb-8 shadow-lg">
-            <div className={`border-2 border-dashed rounded-lg p-4 md:p-8 text-center transition-colors cursor-pointer ${isDragOver ? 'border-yellow-500 bg-yellow-50' : 'border-gray-300 bg-gray-50 hover:border-yellow-400'}`}
-              onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop} onClick={handleFileSelect}>
-              <input ref={fileInputRef} type="file" accept=".pdf" onChange={handleFileChange} className="hidden" />
-              <FiUpload className={`h-10 w-10 md:h-12 md:w-12 mx-auto mb-3 ${isDragOver ? 'text-yellow-500' : 'text-gray-400'}`} />
-              {!selectedFile ? (
-                <>
-                  <h3 className="text-base md:text-lg font-semibold text-gray-700 mb-2"><span className="text-yellow-600 underline">Drop your PDF here or browse</span></h3>
-                  <p className="text-xs md:text-sm text-gray-500">Supports: .pdf files only</p>
-                </>
-              ) : (
-                <>
-                  <h3 className="text-base md:text-lg font-semibold text-gray-700 mb-2"><span className="text-yellow-600 underline">Add more files or drop here</span></h3>
-                  <p className="text-xs md:text-sm text-gray-500">Click to select another file</p>
-                </>
-              )}
+      
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <div className="flex items-center justify-center mb-4">
+            <div className="bg-yellow-600 p-3 rounded-full mr-4">
+              <FiMinimize2 className="h-6 w-6 text-white" />
             </div>
-            {selectedFile && (
-              <div className="mt-6 bg-gray-50 rounded-lg p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center flex-1"><FiUpload className="h-5 w-5 text-red-500 mr-3" />
-                    <div><div className="text-sm font-medium text-gray-800">{selectedFile.name}</div><div className="text-xs text-gray-500">{selectedFile.size}</div></div>
+            <h1 className="text-2xl md:text-3xl font-bold">Compress PDF</h1>
+          </div>
+          <p className="text-sm text-gray-400 max-w-2xl mx-auto">
+            Reduce PDF file size while maintaining good quality. Perfect for email attachments, web uploads, and storage optimization.
+          </p>
+        </div>
+
+        {/* File Upload Area */}
+        <Card className="mb-6 bg-gray-800 border-gray-700">
+          <CardContent className="p-6">
+            <div
+              className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer ${
+                isDragOver 
+                  ? 'border-yellow-500 bg-yellow-500/10' 
+                  : 'border-gray-600 hover:border-gray-500'
+              }`}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              onClick={handleFileSelect}
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf"
+                onChange={handleFileChange}
+                className="hidden"
+              />
+              <FiUpload className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-white mb-2">
+                Drop PDF file here or click to browse
+              </h3>
+              <p className="text-sm text-gray-400 mb-4">
+                Select a PDF file to compress and reduce its size
+              </p>
+              <Button className="bg-yellow-600 hover:bg-yellow-700">
+                Choose PDF File
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Selected File */}
+        {selectedFile && (
+          <Card className="mb-6 bg-gray-800 border-gray-700">
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center">
+                <FiInfo className="mr-2 h-5 w-5" />
+                Selected File
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-between bg-gray-700 p-4 rounded-lg">
+                <div className="flex items-center space-x-3">
+                  <div className="bg-red-600 p-2 rounded">
+                    <FiUpload className="h-4 w-4 text-white" />
                   </div>
-                  <button onClick={() => setSelectedFile(null)} className="p-2 text-gray-400 hover:text-red-500 transition-colors"><FiX className="h-5 w-5" /></button>
+                  <div>
+                    <div className="font-medium text-sm">{selectedFile.name}</div>
+                    <div className="text-xs text-gray-400">Original size: {selectedFile.size}</div>
+                  </div>
                 </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSelectedFile(null)}
+                  className="text-red-400 hover:text-red-300"
+                >
+                  <FiX className="h-4 w-4" />
+                </Button>
               </div>
-            )}
-          </div>
-          {selectedFile && (
-            <div className="bg-white rounded-xl p-4 md:p-8 shadow-lg">
-              <button onClick={handleCompress} disabled={isProcessing} className="w-full bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-600 hover:to-yellow-700 disabled:from-gray-400 disabled:to-gray-500 text-white font-semibold py-3 px-6 rounded-lg transition-all duration-200 shadow-lg hover:shadow-xl flex items-center justify-center disabled:cursor-not-allowed">
-                {isProcessing ? (<> <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div> Compressing... </>) : (<> <FiMinimize2 className="h-5 w-5 mr-2" /> Compress PDF </>)}
-              </button>
-              {processStatus && (
-                <div className={`mt-4 p-4 rounded-lg text-center text-sm font-medium ${processStatus.includes('✅') ? 'bg-green-50 border border-green-200 text-green-800' : processStatus.includes('❌') ? 'bg-red-50 border border-red-200 text-red-800' : 'bg-blue-50 border border-blue-200 text-blue-800'}`}>{processStatus}</div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Compression Options */}
+        {selectedFile && !compressionResult && (
+          <Card className="mb-6 bg-gray-800 border-gray-700">
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center">
+                <FiSettings className="mr-2 h-5 w-5" />
+                Compression Settings
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-3">
+                    Choose optimization preset:
+                  </label>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {useCaseOptions.map((option) => {
+                      const IconComponent = option.icon
+                      return (
+                        <Button
+                          key={option.value}
+                          variant={selectedUseCase === option.value ? 'default' : 'outline'}
+                          onClick={() => setSelectedUseCase(option.value as any)}
+                          className="h-auto p-4 flex flex-col items-start space-y-2"
+                        >
+                          <div className="flex items-center space-x-2">
+                            <IconComponent className="h-4 w-4" />
+                            <span className="font-semibold">{option.label}</span>
+                          </div>
+                          <span className="text-xs opacity-75">{option.description}</span>
+                        </Button>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    id="showAdvanced"
+                    checked={showAdvancedOptions}
+                    onChange={(e) => setShowAdvancedOptions(e.target.checked)}
+                    className="rounded border-gray-600 bg-gray-700"
+                  />
+                  <label htmlFor="showAdvanced" className="text-sm text-gray-300">
+                    Show advanced options
+                  </label>
+                </div>
+
+                {showAdvancedOptions && (
+                  <div className="space-y-4 p-4 bg-gray-700 rounded-lg">
+                    <h4 className="font-semibold text-white">Advanced Settings</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm text-gray-300 mb-1">Quality Level:</label>
+                        <select 
+                          className="w-full bg-gray-600 border border-gray-500 rounded px-3 py-2 text-sm text-white"
+                          onChange={(e) => setCustomOptions(prev => ({
+                            ...getRecommendedCompressionSettings(selectedFile.sizeBytes, selectedUseCase),
+                            ...prev,
+                            quality: e.target.value as any
+                          }))}
+                        >
+                          <option value="high">High Quality (less compression)</option>
+                          <option value="medium">Medium Quality (balanced)</option>
+                          <option value="low">Low Quality (more compression)</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm text-gray-300 mb-1">Image Quality:</label>
+                        <select 
+                          className="w-full bg-gray-600 border border-gray-500 rounded px-3 py-2 text-sm text-white"
+                          onChange={(e) => setCustomOptions(prev => ({
+                            ...getRecommendedCompressionSettings(selectedFile.sizeBytes, selectedUseCase),
+                            ...prev,
+                            imageQuality: parseFloat(e.target.value)
+                          }))}
+                        >
+                          <option value="0.9">90% (high quality)</option>
+                          <option value="0.7">70% (balanced)</option>
+                          <option value="0.5">50% (smaller size)</option>
+                          <option value="0.3">30% (maximum compression)</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="flex items-center">
+                        <input 
+                          type="checkbox" 
+                          className="mr-2" 
+                          defaultChecked
+                          onChange={(e) => setCustomOptions(prev => ({
+                            ...getRecommendedCompressionSettings(selectedFile.sizeBytes, selectedUseCase),
+                            ...prev,
+                            removeMetadata: e.target.checked
+                          }))}
+                        />
+                        <span className="text-sm text-gray-300">Remove metadata (author, creation date, etc.)</span>
+                      </label>
+                      <label className="flex items-center">
+                        <input 
+                          type="checkbox" 
+                          className="mr-2" 
+                          defaultChecked
+                          onChange={(e) => setCustomOptions(prev => ({
+                            ...getRecommendedCompressionSettings(selectedFile.sizeBytes, selectedUseCase),
+                            ...prev,
+                            optimizeImages: e.target.checked
+                          }))}
+                        />
+                        <span className="text-sm text-gray-300">Optimize images</span>
+                      </label>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Compress Button */}
+        {selectedFile && !compressionResult && (
+          <Card className="mb-6 bg-gray-800 border-gray-700">
+            <CardContent className="p-6">
+              <div className="text-center">
+                <Button
+                  onClick={handleCompress}
+                  disabled={isProcessing}
+                  className="bg-yellow-600 hover:bg-yellow-700 text-white px-8 py-3 text-lg"
+                >
+                  {isProcessing ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Compressing...
+                    </>
+                  ) : (
+                    <>
+                      <FiMinimize2 className="mr-2 h-5 w-5" />
+                      Compress PDF
+                    </>
+                  )}
+                </Button>
+                {processStatus && (
+                  <p className="text-sm text-gray-400 mt-2">{processStatus}</p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Compression Results */}
+        {compressionResult && (
+          <Card className="mb-6 bg-gray-800 border-gray-700">
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center">
+                <FiZap className="mr-2 h-5 w-5" />
+                Compression Results
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {compressionResult.success ? (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="bg-gray-700 p-4 rounded-lg text-center">
+                      <div className="text-xs text-gray-400">Original Size</div>
+                      <div className="text-lg font-semibold">{formatFileSize(compressionResult.originalSize)}</div>
+                    </div>
+                    <div className="bg-gray-700 p-4 rounded-lg text-center">
+                      <div className="text-xs text-gray-400">Compressed Size</div>
+                      <div className="text-lg font-semibold text-green-400">{formatFileSize(compressionResult.compressedSize)}</div>
+                    </div>
+                    <div className="bg-gray-700 p-4 rounded-lg text-center">
+                      <div className="text-xs text-gray-400">Size Reduction</div>
+                      <div className="text-lg font-semibold text-blue-400">
+                        {getCompressionPercentage(compressionResult.originalSize, compressionResult.compressedSize)}%
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <Button
+                      onClick={handleDownload}
+                      className="bg-green-600 hover:bg-green-700 flex-1"
+                    >
+                      <FiDownload className="mr-2 h-4 w-4" />
+                      Download Compressed PDF
+                    </Button>
+                    <Button
+                      onClick={startOver}
+                      variant="outline"
+                      className="flex-1"
+                    >
+                      Compress Another File
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center">
+                  <div className="text-red-400 mb-4">
+                    {compressionResult.error || 'Compression failed'}
+                  </div>
+                  <Button onClick={startOver} variant="outline">
+                    Try Again
+                  </Button>
+                </div>
               )}
-              {processStatus && (
-                <button onClick={startOver} className="mt-4 w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-3 px-6 rounded-lg transition-colors">Start Over</button>
-              )}
-            </div>
-          )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Features Section */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <Card className="bg-gray-800 border-gray-700">
+            <CardContent className="p-6 text-center">
+              <div className="bg-blue-600 p-3 rounded-full w-fit mx-auto mb-4">
+                <FiZap className="h-6 w-6 text-white" />
+              </div>
+              <h3 className="text-lg font-semibold mb-2">Smart Compression</h3>
+              <p className="text-sm text-gray-400">
+                Intelligent algorithms reduce file size while preserving quality
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-gray-800 border-gray-700">
+            <CardContent className="p-6 text-center">
+              <div className="bg-green-600 p-3 rounded-full w-fit mx-auto mb-4">
+                <FiShield className="h-6 w-6 text-white" />
+              </div>
+              <h3 className="text-lg font-semibold mb-2">Secure Processing</h3>
+              <p className="text-sm text-gray-400">
+                Files are processed locally in your browser for maximum security
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-gray-800 border-gray-700">
+            <CardContent className="p-6 text-center">
+              <div className="bg-purple-600 p-3 rounded-full w-fit mx-auto mb-4">
+                <FiSettings className="h-6 w-6 text-white" />
+              </div>
+              <h3 className="text-lg font-semibold mb-2">Customizable Options</h3>
+              <p className="text-sm text-gray-400">
+                Choose from presets or fine-tune compression settings
+              </p>
+            </CardContent>
+          </Card>
         </div>
-      </section>
+
+        {/* How it Works */}
+        <Card className="bg-gray-800 border-gray-700">
+          <CardHeader>
+            <CardTitle className="text-xl text-center">How PDF Compression Works</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+              <div className="text-center">
+                <div className="bg-yellow-600 text-white rounded-full w-8 h-8 flex items-center justify-center mx-auto mb-3 text-sm font-bold">1</div>
+                <h4 className="font-semibold mb-2">Upload PDF</h4>
+                <p className="text-sm text-gray-400">Select the PDF file you want to compress</p>
+              </div>
+              <div className="text-center">
+                <div className="bg-yellow-600 text-white rounded-full w-8 h-8 flex items-center justify-center mx-auto mb-3 text-sm font-bold">2</div>
+                <h4 className="font-semibold mb-2">Choose Settings</h4>
+                <p className="text-sm text-gray-400">Select compression level and optimization options</p>
+              </div>
+              <div className="text-center">
+                <div className="bg-yellow-600 text-white rounded-full w-8 h-8 flex items-center justify-center mx-auto mb-3 text-sm font-bold">3</div>
+                <h4 className="font-semibold mb-2">Process File</h4>
+                <p className="text-sm text-gray-400">Our algorithms optimize your PDF for smaller size</p>
+              </div>
+              <div className="text-center">
+                <div className="bg-yellow-600 text-white rounded-full w-8 h-8 flex items-center justify-center mx-auto mb-3 text-sm font-bold">4</div>
+                <h4 className="font-semibold mb-2">Download</h4>
+                <p className="text-sm text-gray-400">Get your compressed PDF ready for sharing</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </main>
+
       <Footer />
     </div>
   )
 }
-
