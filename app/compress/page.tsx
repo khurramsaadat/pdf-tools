@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
 import { 
   compressPDF, 
+  ultraCompressPDF,
   getRecommendedCompressionSettings, 
   formatFileSize, 
   getCompressionPercentage,
@@ -34,6 +35,8 @@ export default function CompressPDFPage() {
   const [selectedUseCase, setSelectedUseCase] = useState<'email' | 'web' | 'print' | 'archive'>('email')
   const [customOptions, setCustomOptions] = useState<CompressionOptions | null>(null)
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false)
+  const [compressionHistory, setCompressionHistory] = useState<CompressionResult[]>([])
+  const [currentFile, setCurrentFile] = useState<File | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const generateId = () => Math.random().toString(36).substr(2, 9)
@@ -43,6 +46,8 @@ export default function CompressPDFPage() {
     setProcessStatus('')
     setCompressionResult(null)
     setCustomOptions(null)
+    setCompressionHistory([])
+    setCurrentFile(null)
   }
 
   const handleFileSelect = () => fileInputRef.current?.click()
@@ -57,8 +62,10 @@ export default function CompressPDFPage() {
         sizeBytes: file.size,
         file: file
       })
+      setCurrentFile(file)
       setCompressionResult(null)
       setProcessStatus('')
+      setCompressionHistory([])
     } else {
       alert('Please select a valid PDF file')
     }
@@ -87,35 +94,56 @@ export default function CompressPDFPage() {
         sizeBytes: file.size,
         file: file
       })
+      setCurrentFile(file)
       setCompressionResult(null)
       setProcessStatus('')
+      setCompressionHistory([])
     } else {
       alert('Please select a valid PDF file')
     }
   }
 
-  const handleCompress = async () => {
+  const handleCompress = async (useUltraCompression = false) => {
     if (!selectedFile) return
 
     setIsProcessing(true)
     setProcessStatus('Initializing compression...')
-    setCompressionResult(null)
+    
+    // Use the current compressed file if available, otherwise use original
+    const fileToCompress = compressionResult?.compressedPdfBytes && currentFile
+      ? new File([compressionResult.compressedPdfBytes as BlobPart], selectedFile.name, { type: 'application/pdf' })
+      : selectedFile.file
 
     try {
-      // Get compression options
-      const options = customOptions || getRecommendedCompressionSettings(
-        selectedFile.sizeBytes,
-        selectedUseCase
-      )
+      // Get compression options with more aggressive settings
+      const options = customOptions || {
+        ...getRecommendedCompressionSettings(selectedFile.sizeBytes, selectedUseCase),
+        // Force aggressive settings for better compression
+        removeMetadata: true,
+        optimizeImages: true,
+        removeAnnotations: selectedUseCase === 'email' || selectedUseCase === 'web',
+        imageQuality: selectedUseCase === 'email' ? 0.3 : 0.5
+      }
 
-      // Compress the PDF
-      const result = await compressPDF(selectedFile.file, options, (status) => {
-        setProcessStatus(status)
-      })
+      // Choose compression method
+      const result = useUltraCompression 
+        ? await ultraCompressPDF(fileToCompress, options, (status) => {
+            setProcessStatus(status)
+          })
+        : await compressPDF(fileToCompress, options, (status) => {
+            setProcessStatus(status)
+          })
+
+      // Add to compression history
+      if (result.success) {
+        setCompressionHistory(prev => [...prev, result])
+      }
 
       setCompressionResult(result)
 
       if (result.success && result.compressedPdfBytes) {
+        // Update current file for further compression
+        setCurrentFile(new File([result.compressedPdfBytes as BlobPart], selectedFile.name, { type: 'application/pdf' }))
         setProcessStatus('Compression completed successfully!')
       } else {
         setProcessStatus(result.error || 'Compression failed')
@@ -369,23 +397,42 @@ export default function CompressPDFPage() {
           <Card className="mb-6 bg-gray-800 border-gray-700">
             <CardContent className="p-6">
               <div className="text-center">
-                <Button
-                  onClick={handleCompress}
-                  disabled={isProcessing}
-                  className="bg-yellow-600 hover:bg-yellow-700 text-white px-8 py-3 text-lg"
-                >
-                  {isProcessing ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                      Compressing...
-                    </>
-                  ) : (
-                    <>
-                      <FiMinimize2 className="mr-2 h-5 w-5" />
-                      Compress PDF
-                    </>
-                  )}
-                </Button>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <Button
+                    onClick={() => handleCompress(false)}
+                    disabled={isProcessing}
+                    className="bg-yellow-600 hover:bg-yellow-700 text-white px-6 py-3 flex-1"
+                  >
+                    {isProcessing ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                        Compressing...
+                      </>
+                    ) : (
+                      <>
+                        <FiMinimize2 className="mr-2 h-4 w-4" />
+                        Compress PDF
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    onClick={() => handleCompress(true)}
+                    disabled={isProcessing}
+                    className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 flex-1"
+                  >
+                    {isProcessing ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                        Ultra Compressing...
+                      </>
+                    ) : (
+                      <>
+                        <FiZap className="mr-2 h-4 w-4" />
+                        Ultra Compress
+                      </>
+                    )}
+                  </Button>
+                </div>
                 {processStatus && (
                   <p className="text-sm text-gray-400 mt-2">{processStatus}</p>
                 )}
@@ -423,18 +470,55 @@ export default function CompressPDFPage() {
                     </div>
                   </div>
                   
-                  <div className="flex flex-col sm:flex-row gap-3">
+                  <div className="flex flex-col gap-3">
                     <Button
                       onClick={handleDownload}
-                      className="bg-green-600 hover:bg-green-700 flex-1"
+                      className="bg-green-600 hover:bg-green-700"
                     >
                       <FiDownload className="mr-2 h-4 w-4" />
                       Download Compressed PDF
                     </Button>
+                    
+                    {compressionResult.compressionRatio < 50 && (
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        <Button
+                          onClick={() => handleCompress(false)}
+                          disabled={isProcessing}
+                          variant="outline"
+                          className="flex-1 border-yellow-600 text-yellow-600 hover:bg-yellow-600 hover:text-white"
+                        >
+                          <FiMinimize2 className="mr-2 h-4 w-4" />
+                          Compress More
+                        </Button>
+                        <Button
+                          onClick={() => handleCompress(true)}
+                          disabled={isProcessing}
+                          variant="outline"
+                          className="flex-1 border-red-600 text-red-600 hover:bg-red-600 hover:text-white"
+                        >
+                          <FiZap className="mr-2 h-4 w-4" />
+                          Ultra Compress
+                        </Button>
+                      </div>
+                    )}
+                    
+                    {compressionHistory.length > 1 && (
+                      <div className="mt-4 p-3 bg-gray-700 rounded-lg">
+                        <h4 className="text-sm font-semibold text-white mb-2">Compression History:</h4>
+                        <div className="space-y-1">
+                          {compressionHistory.map((result, index) => (
+                            <div key={index} className="text-xs text-gray-400 flex justify-between">
+                              <span>Pass {index + 1}:</span>
+                              <span>{formatFileSize(result.compressedSize)} ({result.compressionRatio.toFixed(1)}% reduction)</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    
                     <Button
                       onClick={startOver}
                       variant="outline"
-                      className="flex-1"
                     >
                       Compress Another File
                     </Button>
