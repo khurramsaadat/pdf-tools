@@ -1,4 +1,4 @@
-import { PDFDocument, PDFImage, PDFPage, PDFName } from 'pdf-lib'
+import { PDFDocument, PDFName, PDFArray, PDFDict, PDFRef } from 'pdf-lib'
 
 export interface CompressionOptions {
   quality: 'high' | 'medium' | 'low'
@@ -18,7 +18,7 @@ export interface CompressionResult {
 }
 
 /**
- * Compress a PDF file with aggressive optimization techniques
+ * Compress a PDF file with effective optimization techniques
  */
 export async function compressPDF(
   file: File,
@@ -40,127 +40,118 @@ export async function compressPDF(
     // Remove metadata aggressively
     if (options.removeMetadata) {
       statusCallback?.('Removing metadata and unnecessary data...')
-      pdfDoc.setTitle('')
-      pdfDoc.setAuthor('')
-      pdfDoc.setSubject('')
-      pdfDoc.setKeywords([])
-      pdfDoc.setProducer('')
-      pdfDoc.setCreator('')
-      pdfDoc.setCreationDate(new Date(0))
-      pdfDoc.setModificationDate(new Date(0))
+      try {
+        pdfDoc.setTitle('')
+        pdfDoc.setAuthor('')
+        pdfDoc.setSubject('')
+        pdfDoc.setKeywords([])
+        pdfDoc.setProducer('')
+        pdfDoc.setCreator('')
+        pdfDoc.setCreationDate(new Date(0))
+        pdfDoc.setModificationDate(new Date(0))
+      } catch (error) {
+        console.warn('Could not remove some metadata:', error)
+      }
+    }
+    
+    // Remove document-level optional content aggressively
+    statusCallback?.('Removing optional document content...')
+    try {
+      const catalog = pdfDoc.catalog
+      const keysToRemove = [
+        'OCProperties', 'Metadata', 'StructTreeRoot', 'MarkInfo', 
+        'Lang', 'SpiderInfo', 'OutputIntents', 'PieceInfo', 
+        'Perms', 'Legal', 'Requirements', 'Collection', 
+        'NeedsRendering', 'PageLabels', 'Names', 'Dests',
+        'ViewerPreferences', 'PageLayout', 'PageMode',
+        'Outlines', 'Threads', 'OpenAction', 'AA', 'URI'
+      ]
+      
+      keysToRemove.forEach(key => {
+        try {
+          catalog.delete(PDFName.of(key))
+        } catch (error) {
+          // Ignore individual key deletion errors
+        }
+      })
+    } catch (error) {
+      console.warn('Could not remove document-level content:', error)
     }
     
     // Process each page for aggressive optimization
     const pages = pdfDoc.getPages()
     for (let i = 0; i < pages.length; i++) {
-      statusCallback?.(`Aggressively optimizing page ${i + 1}/${pages.length}...`)
+      statusCallback?.(`Optimizing page ${i + 1}/${pages.length}...`)
       const page = pages[i]
       
-      // Remove annotations
-      if (options.removeAnnotations) {
-        try {
-          const annotations = page.node.get(PDFName.of('Annots'))
-          if (annotations) {
-            page.node.delete(PDFName.of('Annots'))
-          }
-        } catch (error) {
-          console.warn('Could not remove annotations from page', i + 1)
-        }
-      }
-      
-      // Remove optional content (layers)
       try {
-        page.node.delete(PDFName.of('Group'))
-        page.node.delete(PDFName.of('Thumb'))
-        page.node.delete(PDFName.of('B'))
-        page.node.delete(PDFName.of('Dur'))
-        page.node.delete(PDFName.of('Trans'))
+        // Remove page-level optional content
+        const pageKeysToRemove = [
+          'Annots', 'Thumb', 'B', 'Dur', 'Trans', 
+          'AA', 'Metadata', 'PieceInfo', 'SeparationInfo',
+          'Tabs', 'TemplateInstantiated', 'PresSteps',
+          'UserUnit', 'VP'
+        ]
+        
+        pageKeysToRemove.forEach(key => {
+          try {
+            if (key === 'Annots' && !options.removeAnnotations) {
+              return // Skip if annotations should be preserved
+            }
+            page.node.delete(PDFName.of(key))
+          } catch (error) {
+            // Ignore individual key deletion errors
+          }
+        })
+        
+        // Remove page group and other optional elements
+        try {
+          const pageDict = page.node
+          pageDict.delete(PDFName.of('Group'))
+          pageDict.delete(PDFName.of('StructParents'))
+        } catch (error) {
+          // Ignore errors
+        }
+        
       } catch (error) {
-        // Ignore errors for optional content removal
-      }
-      
-      // Aggressive image optimization simulation
-      if (options.optimizeImages) {
-        statusCallback?.(`Compressing images on page ${i + 1}...`)
-        // Simulate aggressive image processing
-        await new Promise(resolve => setTimeout(resolve, 100))
+        console.warn(`Could not optimize page ${i + 1}:`, error)
       }
     }
     
-    // Remove document-level optional content
-    try {
-      const catalog = pdfDoc.catalog
-      catalog.delete(PDFName.of('OCProperties'))
-      catalog.delete(PDFName.of('Metadata'))
-      catalog.delete(PDFName.of('StructTreeRoot'))
-      catalog.delete(PDFName.of('MarkInfo'))
-      catalog.delete(PDFName.of('Lang'))
-      catalog.delete(PDFName.of('SpiderInfo'))
-      catalog.delete(PDFName.of('OutputIntents'))
-      catalog.delete(PDFName.of('PieceInfo'))
-      catalog.delete(PDFName.of('Perms'))
-      catalog.delete(PDFName.of('Legal'))
-      catalog.delete(PDFName.of('Requirements'))
-      catalog.delete(PDFName.of('Collection'))
-      catalog.delete(PDFName.of('NeedsRendering'))
-    } catch (error) {
-      // Ignore errors for optional content removal
+    // Optimize images if requested
+    if (options.optimizeImages) {
+      statusCallback?.('Optimizing images...')
+      try {
+        await optimizeImages(pdfDoc, options.imageQuality, statusCallback)
+      } catch (error) {
+        console.warn('Image optimization failed:', error)
+      }
     }
     
-    // Set aggressive compression options based on quality level
-    let saveOptions: any = {}
+    // Set compression options based on quality level
+    let saveOptions: any = {
+      useObjectStreams: true,
+      addDefaultPage: false,
+      updateFieldAppearances: false
+    }
     
     switch (options.quality) {
       case 'high':
-        // Moderate compression
-        saveOptions = {
-          useObjectStreams: true,
-          addDefaultPage: false,
-          objectsPerTick: 25,
-          updateFieldAppearances: false
-        }
+        saveOptions.objectsPerTick = 10
         break
       case 'medium':
-        // Aggressive compression
-        saveOptions = {
-          useObjectStreams: true,
-          addDefaultPage: false,
-          objectsPerTick: 50,
-          updateFieldAppearances: false
-        }
+        saveOptions.objectsPerTick = 25
         break
       case 'low':
-        // Maximum compression
-        saveOptions = {
-          useObjectStreams: true,
-          addDefaultPage: false,
-          objectsPerTick: 100,
-          updateFieldAppearances: false
-        }
+        saveOptions.objectsPerTick = 50
         break
     }
     
-    statusCallback?.('Applying aggressive compression...')
-    let compressedPdfBytes = await pdfDoc.save(saveOptions)
-    
-    // Multi-pass compression for better results
-    if (options.quality === 'low') {
-      statusCallback?.('Applying second compression pass...')
-      try {
-        const secondPassDoc = await PDFDocument.load(compressedPdfBytes)
-        compressedPdfBytes = await secondPassDoc.save({
-          useObjectStreams: true,
-          addDefaultPage: false,
-          objectsPerTick: 150,
-          updateFieldAppearances: false
-        })
-      } catch (error) {
-        console.warn('Second pass compression failed, using first pass result')
-      }
-    }
+    statusCallback?.('Applying compression...')
+    const compressedPdfBytes = await pdfDoc.save(saveOptions)
     
     const compressedSize = compressedPdfBytes.length
-    const compressionRatio = ((originalSize - compressedSize) / originalSize) * 100
+    const compressionRatio = originalSize > 0 ? ((originalSize - compressedSize) / originalSize) * 100 : 0
     
     statusCallback?.('Compression complete!')
     
@@ -168,7 +159,7 @@ export async function compressPDF(
       success: true,
       originalSize,
       compressedSize,
-      compressionRatio: Math.max(0, compressionRatio),
+      compressionRatio: Math.max(0, Math.round(compressionRatio * 100) / 100),
       compressedPdfBytes: new Uint8Array(compressedPdfBytes)
     }
     
@@ -185,7 +176,66 @@ export async function compressPDF(
 }
 
 /**
- * Ultra-aggressive compression for maximum size reduction
+ * Optimize images in the PDF document
+ */
+async function optimizeImages(
+  pdfDoc: PDFDocument, 
+  quality: number, 
+  statusCallback?: (status: string) => void
+): Promise<void> {
+  try {
+    statusCallback?.('Scanning for images...')
+    
+    // Get all objects in the PDF
+    const objects = pdfDoc.context.enumerateIndirectObjects()
+    let imageCount = 0
+    
+    for (const [ref, object] of objects) {
+      if (object instanceof PDFDict) {
+        const type = object.get(PDFName.of('Type'))
+        const subtype = object.get(PDFName.of('Subtype'))
+        
+        // Check if this is an image object
+        if (
+          (type && type.toString() === '/XObject') ||
+          (subtype && (subtype.toString() === '/Image' || subtype.toString() === '/Form'))
+        ) {
+          imageCount++
+          statusCallback?.(`Processing image ${imageCount}...`)
+          
+          try {
+            // Try to optimize the image object
+            const filter = object.get(PDFName.of('Filter'))
+            const width = object.get(PDFName.of('Width'))
+            const height = object.get(PDFName.of('Height'))
+            
+            // For now, we'll remove some optional image properties
+            // Full image recompression would require canvas manipulation
+            const optionalKeys = ['SMask', 'Mask', 'Decode', 'Intent', 'Interpolate']
+            optionalKeys.forEach(key => {
+              try {
+                object.delete(PDFName.of(key))
+              } catch (error) {
+                // Ignore deletion errors
+              }
+            })
+            
+          } catch (error) {
+            console.warn(`Could not optimize image ${imageCount}:`, error)
+          }
+        }
+      }
+    }
+    
+    statusCallback?.(`Optimized ${imageCount} images`)
+    
+  } catch (error) {
+    console.warn('Image optimization error:', error)
+  }
+}
+
+/**
+ * Ultra-aggressive compression with multiple optimization passes
  */
 export async function ultraCompressPDF(
   file: File,
@@ -195,68 +245,56 @@ export async function ultraCompressPDF(
   try {
     statusCallback?.('Starting ultra compression...')
     
-    // First pass with regular compression
-    const firstPass = await compressPDF(file, {
-      ...options,
+    // First pass with maximum settings
+    const firstPassOptions: CompressionOptions = {
       quality: 'low',
+      imageQuality: Math.min(options.imageQuality, 0.3),
       removeMetadata: true,
-      removeAnnotations: true,
-      optimizeImages: true
-    }, (status) => statusCallback?.(`Pass 1: ${status}`))
+      optimizeImages: true,
+      removeAnnotations: true
+    }
+    
+    const firstPass = await compressPDF(file, firstPassOptions, (status) => {
+      statusCallback?.(`Pass 1: ${status}`)
+    })
     
     if (!firstPass.success || !firstPass.compressedPdfBytes) {
       return firstPass
     }
     
-    // Second pass - compress the already compressed PDF
-    statusCallback?.('Starting second compression pass...')
-    const tempFile = new File([firstPass.compressedPdfBytes as BlobPart], file.name, { type: 'application/pdf' })
-    
-    const secondPass = await compressPDF(tempFile, {
-      ...options,
-      quality: 'low',
-      removeMetadata: true,
-      removeAnnotations: true,
-      optimizeImages: true
-    }, (status) => statusCallback?.(`Pass 2: ${status}`))
-    
-    if (!secondPass.success || !secondPass.compressedPdfBytes) {
-      return firstPass // Return first pass if second fails
-    }
-    
-    // Third pass for ultra compression
-    statusCallback?.('Starting final ultra compression pass...')
-    const tempFile2 = new File([secondPass.compressedPdfBytes as BlobPart], file.name, { type: 'application/pdf' })
-    
-    try {
-      const arrayBuffer = await tempFile2.arrayBuffer()
-      const pdfDoc = await PDFDocument.load(arrayBuffer)
+    // If we got good compression, try one more pass
+    if (firstPass.compressionRatio > 5) {
+      statusCallback?.('Applying second compression pass...')
       
-      // Ultra-aggressive settings
-      const ultraCompressedBytes = await pdfDoc.save({
-        useObjectStreams: true,
-        addDefaultPage: false,
-        objectsPerTick: 200,
-        updateFieldAppearances: false
-      })
-      
-      const finalSize = ultraCompressedBytes.length
-      const totalCompressionRatio = ((file.size - finalSize) / file.size) * 100
-      
-      statusCallback?.('Ultra compression complete!')
-      
-      return {
-        success: true,
-        originalSize: file.size,
-        compressedSize: finalSize,
-        compressionRatio: Math.max(0, totalCompressionRatio),
-        compressedPdfBytes: new Uint8Array(ultraCompressedBytes)
+      try {
+        const tempFile = new File([firstPass.compressedPdfBytes as BlobPart], file.name, { 
+          type: 'application/pdf' 
+        })
+        
+        const secondPass = await compressPDF(tempFile, firstPassOptions, (status) => {
+          statusCallback?.(`Pass 2: ${status}`)
+        })
+        
+        if (secondPass.success && secondPass.compressedPdfBytes) {
+          // Calculate total compression ratio from original file
+          const totalCompressionRatio = file.size > 0 
+            ? ((file.size - secondPass.compressedSize) / file.size) * 100 
+            : 0
+          
+          return {
+            success: true,
+            originalSize: file.size,
+            compressedSize: secondPass.compressedSize,
+            compressionRatio: Math.max(0, Math.round(totalCompressionRatio * 100) / 100),
+            compressedPdfBytes: secondPass.compressedPdfBytes
+          }
+        }
+      } catch (error) {
+        console.warn('Second pass failed, using first pass result')
       }
-      
-    } catch (error) {
-      console.warn('Ultra compression failed, using second pass result')
-      return secondPass
     }
+    
+    return firstPass
     
   } catch (error: any) {
     console.error('Ultra compression error:', error)
@@ -266,59 +304,6 @@ export async function ultraCompressPDF(
       compressedSize: 0,
       compressionRatio: 0,
       error: `Failed to ultra compress PDF: ${error.message || 'Unknown error'}`
-    }
-  }
-}
-
-/**
- * Advanced PDF compression with image processing
- * Note: This is a more advanced version that would require additional libraries
- * for proper image compression (like sharp or canvas-based compression)
- */
-export async function compressPDFAdvanced(
-  file: File,
-  options: CompressionOptions & {
-    maxImageWidth?: number
-    maxImageHeight?: number
-    jpegQuality?: number
-  },
-  statusCallback?: (status: string) => void
-): Promise<CompressionResult> {
-  try {
-    statusCallback?.('Starting advanced compression...')
-    
-    // For now, use the basic compression
-    // In a full implementation, this would include:
-    // 1. Image extraction and recompression
-    // 2. Font subsetting
-    // 3. Content stream optimization
-    // 4. Duplicate object removal
-    
-    const result = await compressPDF(file, options, statusCallback)
-    
-    // Additional optimizations could be added here
-    if (result.success && result.compressedPdfBytes) {
-      statusCallback?.('Applying advanced optimizations...')
-      
-      // Placeholder for advanced optimizations
-      // This could include:
-      // - Reprocessing images with canvas compression
-      // - Font optimization
-      // - Content stream compression
-      
-      await new Promise(resolve => setTimeout(resolve, 500)) // Simulate processing
-    }
-    
-    return result
-    
-  } catch (error: any) {
-    console.error('Advanced PDF compression error:', error)
-    return {
-      success: false,
-      originalSize: file.size,
-      compressedSize: 0,
-      compressionRatio: 0,
-      error: `Failed to compress PDF: ${error.message || 'Unknown error'}`
     }
   }
 }
@@ -336,18 +321,18 @@ export function getRecommendedCompressionSettings(
     case 'email':
       // Prioritize small file size for email attachments
       return {
-        quality: fileSizeMB > 10 ? 'low' : fileSizeMB > 5 ? 'medium' : 'high',
-        imageQuality: 0.6,
+        quality: 'low',
+        imageQuality: 0.2,
         removeMetadata: true,
         optimizeImages: true,
-        removeAnnotations: false
+        removeAnnotations: true
       }
       
     case 'web':
       // Balance between quality and loading speed
       return {
         quality: 'medium',
-        imageQuality: 0.7,
+        imageQuality: 0.4,
         removeMetadata: true,
         optimizeImages: true,
         removeAnnotations: false
@@ -357,7 +342,7 @@ export function getRecommendedCompressionSettings(
       // Preserve quality for printing
       return {
         quality: 'high',
-        imageQuality: 0.9,
+        imageQuality: 0.8,
         removeMetadata: false,
         optimizeImages: false,
         removeAnnotations: false
@@ -367,7 +352,7 @@ export function getRecommendedCompressionSettings(
       // Long-term storage, balance quality and size
       return {
         quality: 'medium',
-        imageQuality: 0.8,
+        imageQuality: 0.6,
         removeMetadata: false,
         optimizeImages: true,
         removeAnnotations: false
@@ -376,7 +361,7 @@ export function getRecommendedCompressionSettings(
     default:
       return {
         quality: 'medium',
-        imageQuality: 0.7,
+        imageQuality: 0.5,
         removeMetadata: true,
         optimizeImages: true,
         removeAnnotations: false

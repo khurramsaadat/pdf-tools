@@ -134,12 +134,24 @@ export default function CompressPDFPage() {
             setProcessStatus(status)
           })
 
-      // Add to compression history
+      // Add to compression history and calculate cumulative compression
       if (result.success) {
-        setCompressionHistory(prev => [...prev, result])
+        // Calculate compression ratio from original file size
+        const originalFileSize = selectedFile.sizeBytes
+        const cumulativeCompressionRatio = originalFileSize > 0 
+          ? ((originalFileSize - result.compressedSize) / originalFileSize) * 100 
+          : 0
+        
+        const adjustedResult = {
+          ...result,
+          compressionRatio: Math.max(0, Math.round(cumulativeCompressionRatio * 100) / 100)
+        }
+        
+        setCompressionHistory(prev => [...prev, adjustedResult])
+        setCompressionResult(adjustedResult)
+      } else {
+        setCompressionResult(result)
       }
-
-      setCompressionResult(result)
 
       if (result.success && result.compressedPdfBytes) {
         // Update current file for further compression
