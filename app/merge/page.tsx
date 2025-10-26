@@ -79,14 +79,14 @@ export default function MergePDFPage() {
       }
 
       try {
-        const pdfInfo = await getPDFInfo(file)
-        
+          const pdfInfo = await getPDFInfo(file)
+          
         const pdfFile: PDFFile = {
           id: `${Date.now()}-${i}`,
           name: file.name,
           size: formatFileSize(file.size),
           sizeBytes: file.size,
-          pages: pdfInfo.numPages,
+          pages: pdfInfo.pageCount,
           file: file
         }
         
@@ -96,7 +96,7 @@ export default function MergePDFPage() {
         alert(`Error processing ${file.name}. Please make sure it's a valid PDF file.`)
       }
     }
-    
+
     setSelectedFiles(prev => [...prev, ...newFiles])
   }, [])
 
@@ -167,7 +167,7 @@ export default function MergePDFPage() {
 
       setProcessingStatus('Preparing download...')
       
-      const blob = new Blob([mergedPdfBytes], { type: 'application/pdf' })
+      const blob = new Blob([mergedPdfBytes as BlobPart], { type: 'application/pdf' })
       const url = URL.createObjectURL(blob)
       
       const link = document.createElement('a')
@@ -214,11 +214,11 @@ export default function MergePDFPage() {
             Combine multiple PDF files into one document. Drag and drop your files, reorder them as needed, and download your merged PDF instantly.
           </p>
         </div>
-
+          
         {/* File Upload Area */}
         <Card className="mb-6 bg-gray-800 border-gray-700">
           <CardContent className="p-6">
-            <div
+            <div 
               className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
                 isDragOver 
                   ? 'border-blue-500 bg-blue-500/10' 
@@ -255,7 +255,7 @@ export default function MergePDFPage() {
         </Card>
 
         {/* Selected Files */}
-        {selectedFiles.length > 0 && (
+            {selectedFiles.length > 0 && (
           <Card className="mb-6 bg-gray-800 border-gray-700">
             <CardHeader>
               <CardTitle className="text-lg flex items-center">
@@ -268,7 +268,7 @@ export default function MergePDFPage() {
                 <div className="bg-gray-700 p-3 rounded-lg">
                   <div className="text-xs text-gray-400">Total Files</div>
                   <div className="text-lg font-semibold">{selectedFiles.length}</div>
-                </div>
+                      </div>
                 <div className="bg-gray-700 p-3 rounded-lg">
                   <div className="text-xs text-gray-400">Total Pages</div>
                   <div className="text-lg font-semibold">{totalPages}</div>
@@ -276,8 +276,8 @@ export default function MergePDFPage() {
                 <div className="bg-gray-700 p-3 rounded-lg">
                   <div className="text-xs text-gray-400">Total Size</div>
                   <div className="text-lg font-semibold">{formatFileSize(totalSize)}</div>
-                </div>
-              </div>
+                          </div>
+                        </div>
 
               <div className="space-y-2">
                 {selectedFiles.map((file, index) => (
@@ -324,10 +324,10 @@ export default function MergePDFPage() {
               </div>
             </CardContent>
           </Card>
-        )}
+          )}
 
         {/* Merge Mode Selection */}
-        {selectedFiles.length > 0 && (
+          {selectedFiles.length > 0 && (
           <Card className="mb-6 bg-gray-800 border-gray-700">
             <CardHeader>
               <CardTitle className="text-lg flex items-center">
@@ -359,25 +359,25 @@ export default function MergePDFPage() {
                     <div className="text-xs opacity-75">Choose and reorder individual pages</div>
                   </div>
                 </Button>
-              </div>
+            </div>
 
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Output Filename
-                  </label>
+                Output Filename
+              </label>
                   <Input
-                    type="text"
-                    value={outputFilename}
-                    onChange={(e) => setOutputFilename(e.target.value)}
+                  type="text" 
+                  value={outputFilename}
+                  onChange={(e) => setOutputFilename(e.target.value)}
                     placeholder="Enter filename (without .pdf extension)"
                     className="bg-gray-700 border-gray-600 text-white"
-                  />
-                </div>
+                />
+              </div>
 
                 <div className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
+                  <input 
+                    type="checkbox" 
                     id="preserveBookmarks"
                     checked={preserveBookmarks}
                     onChange={(e) => setPreserveBookmarks(e.target.checked)}
@@ -385,9 +385,9 @@ export default function MergePDFPage() {
                   />
                   <label htmlFor="preserveBookmarks" className="text-sm text-gray-300">
                     Preserve bookmarks and metadata
-                  </label>
-                </div>
+                </label>
               </div>
+            </div>
             </CardContent>
           </Card>
         )}
@@ -404,7 +404,7 @@ export default function MergePDFPage() {
             <CardContent>
               <PDFThumbnailViewer
                 files={selectedFiles}
-                onPageSelection={handlePageSelection}
+                onPagesSelected={handlePageSelection}
               />
             </CardContent>
           </Card>
@@ -457,7 +457,7 @@ export default function MergePDFPage() {
           <Card className="bg-gray-800 border-gray-700">
             <CardContent className="p-6 text-center">
               <div className="bg-green-600 p-3 rounded-full w-fit mx-auto mb-4">
-                <FiShield className="h-6 w-6 text-white" />
+                  <FiShield className="h-6 w-6 text-white" />
               </div>
               <h3 className="text-lg font-semibold mb-2">100% Secure</h3>
               <p className="text-sm text-gray-400">
@@ -477,7 +477,7 @@ export default function MergePDFPage() {
               </p>
             </CardContent>
           </Card>
-        </div>
+          </div>
 
         {/* How it Works */}
         <Card className="bg-gray-800 border-gray-700">

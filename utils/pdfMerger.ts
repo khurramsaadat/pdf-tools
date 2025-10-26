@@ -13,9 +13,156 @@ export interface MergeResult {
 }
 
 /**
- * Merge multiple PDF files into a single PDF
+ * Merge multiple PDF files and return raw bytes (for custom download handling)
  */
 export async function mergePDFs(
+  files: File[], 
+  preserveBookmarks: boolean = true,
+  statusCallback?: (status: string) => void
+): Promise<Uint8Array> {
+  try {
+    statusCallback?.('Creating new PDF document...')
+    const mergedPdf = await PDFDocument.create()
+    
+    console.log(`Starting PDF merge of ${files.length} files`)
+    
+    // Process each file
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i]
+      statusCallback?.(`Processing file ${i + 1}/${files.length}: ${file.name}`)
+      console.log(`Processing file ${i + 1}/${files.length}: ${file.name}`)
+      
+      try {
+        // Read the PDF file
+        const arrayBuffer = await file.arrayBuffer()
+        const pdf = await PDFDocument.load(arrayBuffer)
+        
+        // Get all pages from this PDF
+        const pageCount = pdf.getPageCount()
+        const pageIndices = Array.from({ length: pageCount }, (_, i) => i)
+        
+        // Copy all pages to the merged document
+        const copiedPages = await mergedPdf.copyPages(pdf, pageIndices)
+        
+        // Add each page to the merged document
+        copiedPages.forEach((page) => {
+          mergedPdf.addPage(page)
+        })
+        
+        console.log(`Added ${pageCount} pages from ${file.name}`)
+        
+      } catch (fileError: any) {
+        console.error(`Error processing ${file.name}:`, fileError)
+        throw new Error(`Failed to process ${file.name}: ${fileError.message}`)
+      }
+    }
+    
+    // Check if we have any pages
+    if (mergedPdf.getPageCount() === 0) {
+      throw new Error('No pages could be extracted from the uploaded files')
+    }
+    
+    statusCallback?.('Generating final PDF...')
+    console.log(`Merge complete. Total pages: ${mergedPdf.getPageCount()}`)
+    
+    // Generate and return the merged PDF bytes
+    const pdfBytes = await mergedPdf.save()
+    return new Uint8Array(pdfBytes)
+    
+  } catch (error: any) {
+    console.error('PDF merge error:', error)
+    throw new Error(`Failed to merge PDFs: ${error.message || 'Unknown error'}`)
+  }
+}
+
+/**
+ * Merge selected pages and return raw bytes (for custom download handling)
+ */
+export async function mergeSelectedPages(
+  selectedPages: any[],
+  statusCallback?: (status: string) => void
+): Promise<Uint8Array> {
+  try {
+    statusCallback?.('Creating new PDF document...')
+    const mergedPdf = await PDFDocument.create()
+    
+    console.log(`Starting selective PDF merge of ${selectedPages.length} pages`)
+    
+    // Group pages by file
+    const fileGroups = new Map<string, { file: File; pages: any[] }>()
+    
+    for (const page of selectedPages) {
+      if (!fileGroups.has(page.fileId)) {
+        fileGroups.set(page.fileId, { file: page.file, pages: [] })
+      }
+      fileGroups.get(page.fileId)!.pages.push(page)
+    }
+    
+    // Process each file group
+    for (const [fileId, group] of Array.from(fileGroups.entries())) {
+      statusCallback?.(`Processing ${group.pages.length} pages from ${group.file.name}`)
+      console.log(`Processing ${group.pages.length} pages from ${group.file.name}`)
+      
+      try {
+        // Read the PDF file
+        const arrayBuffer = await group.file.arrayBuffer()
+        const pdf = await PDFDocument.load(arrayBuffer)
+        
+        // Sort pages by their order index
+        const sortedPages = group.pages.sort((a, b) => a.orderIndex - b.orderIndex)
+        
+        // Get page numbers (convert to 0-based indices)
+        const pageIndices = sortedPages.map(page => page.pageNumber - 1)
+        
+        // Validate page numbers
+        const maxPages = pdf.getPageCount()
+        const validPageIndices = pageIndices.filter(index => 
+          index >= 0 && index < maxPages
+        )
+        
+        if (validPageIndices.length === 0) {
+          console.warn(`No valid pages selected from ${group.file.name}`)
+          continue
+        }
+        
+        // Copy selected pages to the merged document
+        const copiedPages = await mergedPdf.copyPages(pdf, validPageIndices)
+        
+        // Add each page to the merged document
+        copiedPages.forEach((page) => {
+          mergedPdf.addPage(page)
+        })
+        
+        console.log(`Added ${validPageIndices.length} selected pages from ${group.file.name}`)
+        
+      } catch (fileError: any) {
+        console.error(`Error processing ${group.file.name}:`, fileError)
+        throw new Error(`Failed to process ${group.file.name}: ${fileError.message}`)
+      }
+    }
+    
+    // Check if we have any pages
+    if (mergedPdf.getPageCount() === 0) {
+      throw new Error('No pages could be extracted from the selected pages')
+    }
+    
+    statusCallback?.('Generating final PDF...')
+    console.log(`Selective merge complete. Total pages: ${mergedPdf.getPageCount()}`)
+    
+    // Generate and return the merged PDF bytes
+    const pdfBytes = await mergedPdf.save()
+    return new Uint8Array(pdfBytes)
+    
+  } catch (error: any) {
+    console.error('PDF selective merge error:', error)
+    throw new Error(`Failed to merge selected pages: ${error.message || 'Unknown error'}`)
+  }
+}
+
+/**
+ * Legacy function - Merge multiple PDF files into a single PDF (with auto-download)
+ */
+export async function mergePDFsLegacy(
   files: File[], 
   options: MergeOptions = {}
 ): Promise<MergeResult> {
@@ -113,9 +260,9 @@ export async function mergePDFs(
 }
 
 /**
- * Merge specific pages from multiple PDF files
+ * Legacy function - Merge specific pages from multiple PDF files (with auto-download)
  */
-export async function mergeSelectedPages(
+export async function mergeSelectedPagesLegacy(
   pageSelections: { file: File; pageNumbers: number[] }[],
   options: MergeOptions = {}
 ): Promise<MergeResult> {
