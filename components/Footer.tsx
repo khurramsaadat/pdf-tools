@@ -3,6 +3,7 @@ import { FiMail, FiGithub, FiHeart, FiLinkedin, FiFacebook, FiInstagram } from '
 import { FaXTwitter } from 'react-icons/fa6'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
+import { LogoBadge } from '@/components/Logo'
 
 export default function Footer() {
   return (
@@ -11,9 +12,9 @@ export default function Footer() {
         <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-5 gap-6">
           {/* Company Info */}
           <div className="col-span-2 lg:col-span-2">
-            <Link href="/" className="flex items-center space-x-2 text-white mb-3">
-              <span className="font-bold text-base sm:text-lg">PDF Converter Online</span>
-            </Link>
+            <div className="mb-4">
+              <LogoBadge size="md" />
+            </div>
             <p className="text-xs sm:text-sm text-gray-400 mb-4 max-w-md">
               The most comprehensive online PDF toolkit. Convert, merge, edit, and manage your PDF documents with ease. Fast, secure, and completely free.
             </p>

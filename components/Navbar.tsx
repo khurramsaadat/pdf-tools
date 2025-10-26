@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useState } from 'react'
-import { FiMenu, FiX, FiFile } from 'react-icons/fi'
+import { FiMenu, FiX } from 'react-icons/fi'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -11,6 +11,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import Logo from '@/components/Logo'
 
 export default function Navbar() {
   const [isOpen, setIsOpen] = useState(false)
@@ -52,10 +53,7 @@ export default function Navbar() {
         <div className="flex items-center justify-between h-14">
           {/* Logo */}
           <div className="flex items-center">
-            <Link href="/" className="flex items-center space-x-2 text-white hover:text-blue-400 transition-colors">
-              <FiFile className="h-6 w-6 text-blue-500" />
-              <span className="font-bold text-lg">PDF Tools</span>
-            </Link>
+            <Logo size="md" variant="horizontal" />
           </div>
 
           {/* Desktop Navigation */}
@@ -153,6 +151,9 @@ export default function Navbar() {
       {isOpen && (
         <div className="md:hidden bg-gray-700">
           <div className="px-2 pt-2 pb-3 space-y-1">
+            <div className="flex justify-center mb-4">
+              <Logo size="sm" variant="horizontal" />
+            </div>
             <Button variant="ghost" size="sm" asChild className="w-full justify-start text-gray-300 hover:bg-gray-600 hover:text-white" onClick={toggleMenu}>
               <Link href="/">Home</Link>
             </Button>
