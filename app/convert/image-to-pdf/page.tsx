@@ -1,0 +1,227 @@
+'use client'
+
+import Link from 'next/link'
+import { useState, useRef } from 'react'
+import { 
+  FiUpload, 
+  FiFile, 
+  FiDownload, 
+  FiImage,
+  FiShield, 
+  FiX,
+  FiArrowLeft
+} from 'react-icons/fi'
+import Navbar from '@/components/Navbar'
+import Footer from '@/components/Footer'
+
+interface ImageFile {
+  id: string
+  name: string
+  size: string
+  file: File
+}
+
+export default function ImageToPDFPage() {
+  const [selectedFiles, setSelectedFiles] = useState<ImageFile[]>([])
+  const [isProcessing, setIsProcessing] = useState(false)
+  const [processStatus, setProcessStatus] = useState<string>('')
+  const [isDragOver, setIsDragOver] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const formatFileSize = (bytes: number): string => {
+    if (bytes === 0) return '0 Bytes'
+    const k = 1024
+    const sizes = ['Bytes', 'KB', 'MB', 'GB']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+  }
+
+  const generateId = () => Math.random().toString(36).substr(2, 9)
+
+  const startOver = () => {
+    setSelectedFiles([])
+    setProcessStatus('')
+  }
+
+  const handleFileSelect = () => {
+    fileInputRef.current?.click()
+  }
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files
+    if (files) {
+      const imageFiles = Array.from(files).filter(file => 
+        file.type.startsWith('image/')
+      ).map(file => ({
+        id: generateId(),
+        name: file.name,
+        size: formatFileSize(file.size),
+        file: file
+      }))
+      setSelectedFiles(prev => [...prev, ...imageFiles])
+    }
+    if (event.target) {
+      event.target.value = ''
+    }
+  }
+
+  const handleDragOver = (event: React.DragEvent) => {
+    event.preventDefault()
+    setIsDragOver(true)
+  }
+
+  const handleDragLeave = (event: React.DragEvent) => {
+    event.preventDefault()
+    setIsDragOver(false)
+  }
+
+  const handleDrop = (event: React.DragEvent) => {
+    event.preventDefault()
+    setIsDragOver(false)
+    const files = event.dataTransfer.files
+    const imageFiles = Array.from(files).filter(file => 
+      file.type.startsWith('image/')
+    ).map(file => ({
+      id: generateId(),
+      name: file.name,
+      size: formatFileSize(file.size),
+      file: file
+    }))
+    setSelectedFiles(prev => [...prev, ...imageFiles])
+  }
+
+  const removeFile = (id: string) => {
+    setSelectedFiles(prev => prev.filter(file => file.id !== id))
+  }
+
+  const handleConvert = async () => {
+    if (selectedFiles.length === 0) return
+
+    setIsProcessing(true)
+    setProcessStatus('Converting images to PDF...')
+
+    try {
+      await new Promise(resolve => setTimeout(resolve, 2000))
+      setProcessStatus('✅ Conversion initiated. This feature is coming soon!')
+    } catch (error: any) {
+      setProcessStatus(`❌ Error: ${error.message || 'Unknown error occurred'}`)
+    } finally {
+      setIsProcessing(false)
+    }
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-900">
+      <Navbar />
+      
+      <section className="bg-gradient-to-br from-gray-800 via-gray-700 to-cyan-900 py-16">
+        <div className="max-w-6xl mx-auto px-3 sm:px-6 lg:px-8">
+          <div className="text-center">
+            <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">Image to PDF</h1>
+            <p className="text-lg md:text-xl text-gray-300 max-w-2xl mx-auto">
+              Convert images to PDF documents instantly. Merge multiple images into one PDF file.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section className="py-16 bg-gray-800">
+        <div className="max-w-4xl mx-auto px-3 sm:px-6 lg:px-8">
+          
+          <div className="bg-white rounded-xl p-4 md:p-8 mb-8 shadow-lg">
+            <div 
+              className={`border-2 border-dashed rounded-lg p-4 md:p-8 text-center transition-colors cursor-pointer ${
+                isDragOver ? 'border-cyan-500 bg-cyan-50' : 'border-gray-300 bg-gray-50 hover:border-cyan-400'
+              }`}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              onClick={handleFileSelect}
+            >
+              <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleFileChange} className="hidden" />
+              <FiUpload className={`h-10 w-10 md:h-12 md:w-12 mx-auto mb-3 ${isDragOver ? 'text-cyan-500' : 'text-gray-400'}`} />
+              
+              {selectedFiles.length === 0 ? (
+                <>
+                  <h3 className="text-base md:text-lg font-semibold text-gray-700 mb-2">
+                    <span className="text-cyan-600 underline">Drop your images here or browse</span>
+                  </h3>
+                  <p className="text-xs md:text-sm text-gray-500">Supports: JPG, PNG, GIF, WEBP</p>
+                </>
+              ) : (
+                <>
+                  <h3 className="text-base md:text-lg font-semibold text-gray-700 mb-2">
+                    <span className="text-cyan-600 underline">Add more images or drop here</span>
+                  </h3>
+                  <p className="text-xs md:text-sm text-gray-500">{selectedFiles.length} image(s) selected</p>
+                </>
+              )}
+            </div>
+
+            {selectedFiles.length > 0 && (
+              <div className="mt-6 space-y-2">
+                {selectedFiles.map((file) => (
+                  <div key={file.id} className="bg-gray-50 rounded-lg p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center flex-1">
+                        <FiImage className="h-5 w-5 text-blue-500 mr-3" />
+                        <div>
+                          <div className="text-sm font-medium text-gray-800">{file.name}</div>
+                          <div className="text-xs text-gray-500">{file.size}</div>
+                        </div>
+                      </div>
+                      <button onClick={() => removeFile(file.id)} className="p-2 text-gray-400 hover:text-red-500 transition-colors">
+                        <FiX className="h-5 w-5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {selectedFiles.length > 0 && (
+            <div className="bg-white rounded-xl p-4 md:p-8 shadow-lg">
+              <button 
+                onClick={handleConvert}
+                disabled={isProcessing}
+                className="w-full bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-600 hover:to-cyan-700 disabled:from-gray-400 disabled:to-gray-500 text-white font-semibold py-3 px-6 rounded-lg transition-all duration-200 shadow-lg hover:shadow-xl flex items-center justify-center disabled:cursor-not-allowed"
+              >
+                {isProcessing ? (
+                  <>
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                    Converting...
+                  </>
+                ) : (
+                  <>
+                    <FiDownload className="h-5 w-5 mr-2" />
+                    Convert to PDF ({selectedFiles.length} image{selectedFiles.length > 1 ? 's' : ''})
+                  </>
+                )}
+              </button>
+
+              {processStatus && (
+                <div className={`mt-4 p-4 rounded-lg text-center text-sm font-medium ${
+                  processStatus.includes('✅') ? 'bg-green-50 border border-green-200 text-green-800'
+                    : processStatus.includes('❌') ? 'bg-red-50 border border-red-200 text-red-800'
+                    : 'bg-blue-50 border border-blue-200 text-blue-800'
+                }`}>
+                  {processStatus}
+                </div>
+              )}
+
+              {processStatus && (
+                <button onClick={startOver} className="mt-4 w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-3 px-6 rounded-lg transition-colors">
+                  Start Over
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      </section>
+
+      <Footer />
+    </div>
+  )
+}
+
