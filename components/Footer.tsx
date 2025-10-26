@@ -6,9 +6,9 @@ export default function Footer() {
   return (
     <footer className="bg-gray-900 border-t border-gray-700">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+        <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-5 gap-8">
           {/* Company Info */}
-          <div className="col-span-1 lg:col-span-1">
+          <div className="col-span-2 lg:col-span-2">
             <Link href="/" className="flex items-center space-x-2 text-white mb-4">
               <span className="font-bold text-base sm:text-xl">PDF Converter Online</span>
             </Link>
@@ -37,6 +37,43 @@ export default function Footer() {
             </div>
           </div>
 
+          {/* Convert Tools */}
+          <div>
+            <h3 className="text-sm sm:text-base text-white font-semibold mb-4">Convert</h3>
+            <ul className="space-y-2">
+              <li>
+                <Link href="/convert/pdf-to-word" className="text-xs sm:text-sm text-gray-400 hover:text-white transition-colors">
+                  PDF to Word
+                </Link>
+              </li>
+              <li>
+                <Link href="/convert/pdf-to-images" className="text-xs sm:text-sm text-gray-400 hover:text-white transition-colors">
+                  PDF to Images
+                </Link>
+              </li>
+              <li>
+                <Link href="/convert/image-to-pdf" className="text-xs sm:text-sm text-gray-400 hover:text-white transition-colors">
+                  Image to PDF
+                </Link>
+              </li>
+              <li>
+                <Link href="/convert/word-to-pdf" className="text-xs sm:text-sm text-gray-400 hover:text-white transition-colors">
+                  Word to PDF
+                </Link>
+              </li>
+              <li>
+                <Link href="/advanced/excel-to-pdf" className="text-xs sm:text-sm text-gray-400 hover:text-white transition-colors">
+                  Excel to PDF
+                </Link>
+              </li>
+              <li>
+                <Link href="/advanced/powerpoint-to-pdf" className="text-xs sm:text-sm text-gray-400 hover:text-white transition-colors">
+                  PPT to PDF
+                </Link>
+              </li>
+            </ul>
+          </div>
+
           {/* Edit & Manage */}
           <div>
             <h3 className="text-sm sm:text-base text-white font-semibold mb-4">Edit & Manage</h3>
@@ -52,8 +89,35 @@ export default function Footer() {
                 </Link>
               </li>
               <li>
+                <Link href="/compress" className="text-xs sm:text-sm text-gray-400 hover:text-white transition-colors">
+                  Compress PDF
+                </Link>
+              </li>
+              <li>
                 <Link href="/edit" className="text-xs sm:text-sm text-gray-400 hover:text-white transition-colors">
                   Edit PDF
+                </Link>
+              </li>
+              <li>
+                <Link href="/rotate" className="text-xs sm:text-sm text-gray-400 hover:text-white transition-colors">
+                  Rotate PDF
+                </Link>
+              </li>
+              <li>
+                <Link href="/page-numbers" className="text-xs sm:text-sm text-gray-400 hover:text-white transition-colors">
+                  Add Page Numbers
+                </Link>
+              </li>
+            </ul>
+          </div>
+
+          {/* Security */}
+          <div>
+            <h3 className="text-sm sm:text-base text-white font-semibold mb-4">Security</h3>
+            <ul className="space-y-2">
+              <li>
+                <Link href="/watermark" className="text-xs sm:text-sm text-gray-400 hover:text-white transition-colors">
+                  Add Watermark
                 </Link>
               </li>
               <li>
@@ -61,40 +125,24 @@ export default function Footer() {
                   Protect PDF
                 </Link>
               </li>
-            </ul>
-          </div>
-
-          {/* Tools */}
-          <div>
-            <h3 className="text-sm sm:text-base text-white font-semibold mb-4">Convert</h3>
-            <ul className="space-y-2">
               <li>
-                <Link href="/convert/pdf-to-word" className="text-xs sm:text-sm text-gray-400 hover:text-white transition-colors">
-                  PDF to Word
+                <Link href="/advanced/password-protect" className="text-xs sm:text-sm text-gray-400 hover:text-white transition-colors">
+                  Advanced Protection
                 </Link>
               </li>
               <li>
-                <Link href="/convert/pdf-to-image" className="text-xs sm:text-sm text-gray-400 hover:text-white transition-colors">
-                  PDF to Image
-                </Link>
-              </li>
-              <li>
-                <Link href="/convert/word-to-pdf" className="text-xs sm:text-sm text-gray-400 hover:text-white transition-colors">
-                  Word to PDF
-                </Link>
-              </li>
-              <li>
-                <Link href="/convert/excel-to-pdf" className="text-xs sm:text-sm text-gray-400 hover:text-white transition-colors">
-                  Excel to PDF
+                <Link href="/advanced/remove-protection" className="text-xs sm:text-sm text-gray-400 hover:text-white transition-colors">
+                  Remove Protection
                 </Link>
               </li>
             </ul>
-          </div>
-
-          {/* Resources */}
-          <div>
-            <h3 className="text-sm sm:text-base text-white font-semibold mb-4">Resources</h3>
+            <h3 className="text-sm sm:text-base text-white font-semibold mb-4 mt-6">Resources</h3>
             <ul className="space-y-2">
+              <li>
+                <Link href="/about" className="text-xs sm:text-sm text-gray-400 hover:text-white transition-colors">
+                  About
+                </Link>
+              </li>
               <li>
                 <Link href="/knowledge-base" className="text-xs sm:text-sm text-gray-400 hover:text-white transition-colors">
                   Knowledge Base
@@ -108,11 +156,6 @@ export default function Footer() {
               <li>
                 <Link href="/knowledge-base/faq" className="text-xs sm:text-sm text-gray-400 hover:text-white transition-colors">
                   FAQ
-                </Link>
-              </li>
-              <li>
-                <Link href="/knowledge-base/troubleshooting" className="text-xs sm:text-sm text-gray-400 hover:text-white transition-colors">
-                  Troubleshooting
                 </Link>
               </li>
             </ul>
